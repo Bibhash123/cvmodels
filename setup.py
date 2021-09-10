@@ -8,7 +8,7 @@ setup(
     description='Keras Implementations of Object Detection Models',
     author='Bibhash Pran Das',
     author_email='bibhashp.das@gmail.com',
-    url='https://github.com/Bibhash12301/Optiver-realized-volatility-prediction-kaggle21/tree/main/src',
+    url='https://github.com/Bibhash123/cvmodels.git',
     long_description=open('README.md', encoding='utf-8').read(),
     long_description_content_type='text/markdown',
     license='MIT',
