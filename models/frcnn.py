@@ -6,6 +6,23 @@ from tensorflow.keras.applications.vgg16 import VGG16
 from tensorflow.keras.applications.inception_v3 import InceptionV3
 from cvmodels.custom_layers import ROIPoolingLayer
 
+def classificationLoss(max_bbox_per_image):
+  def getitems_by_indices(self,values, indices):
+    return tf.map_fn(
+        lambda x: tf.gather(x[0], x[1]), (values, indices), dtype=values.dtype
+    )
+
+  def loss(y_true,y_pred):
+    _, indices = tf.nn.top_k(tf.argmax(y_pred,axis=-1),max_bbox_per_image)
+    y_pred = getitems_by_indices(y_pred,indices)
+    y_true = getitems_by_indices(y_true,indices)
+    cce = tf.keras.losses.CategoricalCrossentropy()
+    l = tf.reduce_mean(tf.map_fn(lambda x: cce(x[0],x[1]),(y_true,y_pred)))
+    return l
+  return loss
+
+# def regressionLoss()
+
 class FastRCNN(tf.keras.Model):
   def __init__(self,
                inputShape: list,
@@ -26,21 +43,19 @@ class FastRCNN(tf.keras.Model):
     #            )
     self.numBbox = max_bbox_per_image
 
-    self.output_deltas = L.Dense(
-            units=4 * self.numBbox,
-            activation="linear",
-            kernel_initializer="glorot_normal",
-            name="deltas"
-        )
+    self.output_deltas = L.TimeDistributed(L.Dense(
+            				   units=4 * num_classes,
+            				   activation="linear",
+            				   kernel_initializer="glorot_normal"
+        				  ), name="deltas")
     
-    self.flatten = L.Flatten()
+    self.flatten = L.TimeDistributed(L.Flatten())
 
-    self.output_scores = L.Dense(
-            units=num_classes * self.numBbox,
-            activation="softmax",
-            kernel_initializer="glorot_normal",
-            name="scores"
-        )
+    self.output_scores = L.TimeDistributed(L.Dense(
+            				   units=num_classes,
+            				   activation="softmax",
+            				   kernel_initializer="glorot_normal"
+        				   ),name="scores")
     if self.roi_shape[0]>max_rois:
       self.roi_shape = (max_rois,self.roi_shape[1])
     if backbone=="InceptionV3":
@@ -56,14 +71,22 @@ class FastRCNN(tf.keras.Model):
     
     self.backbone.trainable= False
   
+  def getitems_by_indices(self,values, indices):
+    return tf.map_fn(
+        lambda x: tf.gather(x[0], x[1]), (values, indices), dtype=values.dtype
+    )
+  
   def call(self,inputs):
+    if inputs[1].shape[1]>self.roi_shape[1]:
+      inputs[1] = inputs[1][:self.roi_shape[1]]
+
     x = self.backbone(inputs[0])
     x = self.roi_pooling([x,inputs[1]])
     x = self.flatten(x)
     # x = self.fc1(x)
-    delta = self.output_deltas(x)
-    score = self.output_scores(x)
-    return [score,delta]
+    deltas = self.output_deltas(x)
+    scores = self.output_scores(x)
+    return [scores,deltas]
   
   def build(self):
     inp,roi = self.inputShape,self.roi_shape
